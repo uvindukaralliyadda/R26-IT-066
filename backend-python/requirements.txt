@@ -1,0 +1,12 @@
+flask
+pandas
+numpy
+scikit-learn
+joblib
+xgboost
+gunicorn
+ultralytics
+opencv-python
+torch
+torchvision
+pillow

@@ -1,0 +1,29 @@
+Project file summary - Integrated Paddy Flask API
+
+Root:
+- app.py: Integrated Flask server that registers four blueprints and exposes unified routes.
+- requirements.txt: Global merged dependencies for the whole project.
+
+crop_reccomend/
+- app.py: `crop_recommendation` Blueprint. Loads `random_forest_model.pkl`, `market_prediction_model.pkl`, `crop_features.pkl`, `market_features.pkl`. Provides `/` and `/predict` endpoints for crop recommendation and price prediction.
+- __init__.py: package marker.
+- requirements.txt: component dependencies.
+
+Decision_support/
+- app.py: `decision_support` Blueprint. Loads `random_forest_model2.pkl` and `model2_xgboost.pkl`. Provides `/` and `/predict` endpoints for yield/loss decision support.
+- __init__.py: package marker.
+- requirements.txt: component dependencies.
+
+disease/
+- app.py: `disease` Blueprint. Uses Ultralytics YOLO with `best.pt` and an `uploads/` folder. Provides `/` and `/predict` (multipart image) endpoints for disease detection.
+- __init__.py: package marker.
+- requirements.txt: component dependencies.
+
+Iot/
+- app.py: `iot` Blueprint. Loads `rf_classifier.pkl`, `xgb_regressor.pkl`, and encoders `le_stage.pkl`, `le_variety.pkl`. Provides `/` and `/predict` endpoints for fertilizer recommendation.
+- __init__.py: package marker.
+- requirements.txt: component dependencies.
+
+Notes:
+- All model/artifact files are expected inside their respective component directories.
+- Run the integrated server from the project root with: `python app.py` (this imports each blueprint which will load models from module-relative paths).

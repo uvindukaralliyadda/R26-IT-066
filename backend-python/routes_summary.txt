@@ -1,0 +1,38 @@
+Routes summary - Integrated Paddy Flask API
+
+Root:
+- GET /                         -> Integrated API root (overview)
+
+Disease service (blueprint mounted at /disease):
+- GET  /disease/                -> Disease service root (status/info)
+- POST /disease/predict         -> Disease detection. Expects `multipart/form-data` with field `image` (file). Returns JSON { success, disease, confidence }.
+
+Decision Support (mounted at /decision-support):
+- GET  /decision-support/       -> DSS root (status/info)
+- POST /decision-support/predict-> Yield/loss prediction. Expects JSON body with fields:
+    soil_moisture, temperature, humidity,
+    nitrogen, phosphorus, potassium,
+    growth_stage, season, variety,
+    disease, severity
+  Returns JSON with base_yield, loss_percent, untreated_yield, treated_yield, decision.
+
+Crop Recommendation (mounted at /crop-recommendation):
+- GET  /crop-recommendation/    -> Crop recommendation root (status/info)
+- POST /crop-recommendation/predict -> Crop and market price predictions. Expects JSON body:
+    soil_moisture, temperature, humidity,
+    nitrogen, phosphorus, potassium,
+    season,
+    market_data: { month_num, lag_price, lag_1, lag_2, lag_3 }
+  Returns recommendations and predicted prices.
+
+IoT Fertilizer (mounted at /iot):
+- GET  /iot/                    -> IoT service root (status/info)
+- POST /iot/predict             -> Fertilizer recommendation. Expects JSON body:
+    soil_moisture, soil_temp, soil_ph,
+    nitrogen, phosphorus, potassium,
+    humidity, growth_stage, rice_variety
+  Returns JSON { fertilizer_needed, recommended_amount, unit }.
+
+Notes:
+- Start server: `python app.py` from project root.
+- Model files and pickles must exist under each component directory for routes to work (they are loaded on import).

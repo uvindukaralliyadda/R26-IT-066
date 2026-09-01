@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/firebase_service.dart';
 
 class CropRecommendationScreen extends StatefulWidget {
   const CropRecommendationScreen({super.key});
@@ -13,20 +14,54 @@ class CropRecommendationScreen extends StatefulWidget {
 class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final TextEditingController _moistureController = TextEditingController(text: '65');
-  final TextEditingController _tempController = TextEditingController(text: '28');
-  final TextEditingController _humidityController = TextEditingController(text: '80');
-  final TextEditingController _nitrogenController = TextEditingController(text: '90');
-  final TextEditingController _phosphorusController = TextEditingController(text: '40');
-  final TextEditingController _potassiumController = TextEditingController(text: '40');
-  final TextEditingController _monthController = TextEditingController(text: '4');
-  final TextEditingController _lagPriceController = TextEditingController(text: '120');
+  final TextEditingController _nitrogenController = TextEditingController(
+    text: '45',
+  );
+  final TextEditingController _phosphorusController = TextEditingController(
+    text: '28',
+  );
+  final TextEditingController _potassiumController = TextEditingController(
+    text: '110',
+  );
+  final TextEditingController _monthController = TextEditingController(
+    text: '4',
+  );
+  final TextEditingController _lagPriceController = TextEditingController(
+    text: '120',
+  );
 
   String _season = 'Yala';
 
   bool _loading = false;
   Map<String, dynamic>? _result;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchFirebaseTelemetry();
+  }
+
+  Future<void> _fetchFirebaseTelemetry() async {
+    try {
+      final data = await FirebaseService.fetchLatestTelemetry();
+      if (data != null && mounted) {
+        setState(() {
+          if (data.containsKey('nitrogen')) {
+            _nitrogenController.text = data['nitrogen'].toString();
+          }
+          if (data.containsKey('phosphorus')) {
+            _phosphorusController.text = data['phosphorus'].toString();
+          }
+          if (data.containsKey('potassium')) {
+            _potassiumController.text = data['potassium'].toString();
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('[CropRecommendationScreen] Telemetry fetch error: $e');
+    }
+  }
 
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
@@ -37,15 +72,13 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
     });
 
     try {
-      final double currentPrice = double.tryParse(_lagPriceController.text) ?? 120.0;
+      final double currentPrice =
+          double.tryParse(_lagPriceController.text) ?? 120.0;
       final double lag1 = currentPrice - 5;
       final double lag2 = currentPrice - 10;
       final double lag3 = currentPrice - 20;
 
       final payload = {
-        'soil_moisture': double.parse(_moistureController.text),
-        'temperature': double.parse(_tempController.text),
-        'humidity': double.parse(_humidityController.text),
         'nitrogen': double.parse(_nitrogenController.text),
         'phosphorus': double.parse(_phosphorusController.text),
         'potassium': double.parse(_potassiumController.text),
@@ -56,7 +89,7 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
           'lag_1': lag1,
           'lag_2': lag2,
           'lag_3': lag3,
-        }
+        },
       };
 
       final response = await ApiService.predictCropRecommendation(payload);
@@ -83,9 +116,7 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
       backgroundColor: AppTheme.bgCanvas,
       appBar: isDesktop
           ? null
-          : AppBar(
-              title: const Text('Smart Crop & Market Guide'),
-            ),
+          : AppBar(title: const Text('Smart Crop & Market Guide')),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(isDesktop ? 32 : 16),
         child: Column(
@@ -100,8 +131,11 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppTheme.greenBorder),
                   ),
-                  child: const Icon(Icons.grass_rounded,
-                      color: AppTheme.primaryGreen, size: 24),
+                  child: const Icon(
+                    Icons.grass_rounded,
+                    color: AppTheme.primaryGreen,
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 const Expanded(
@@ -119,7 +153,9 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                       Text(
                         'Find optimal paddy varieties for your soil & climate and view predicted market prices',
                         style: TextStyle(
-                            fontSize: 12, color: AppTheme.textSecondary),
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -199,82 +235,28 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
             ),
             const Divider(height: 24, color: AppTheme.borderLight),
 
-            // Soil & Climate
-            const Text(
-              '1. SOIL & CLIMATE CONDITIONS',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textSecondary,
-                letterSpacing: 1.1,
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (isMobile) ...[
-              TextFormField(
-                controller: _moistureController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Moisture (%)'),
-                validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _tempController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Temp (°C)'),
-                validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _humidityController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Humidity (%)'),
-                validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-              ),
-            ] else ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _moistureController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Moisture (%)'),
-                      validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _tempController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Temp (°C)'),
-                      validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _humidityController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Humidity (%)'),
-                      validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-
-            const SizedBox(height: 20),
-
             // NPK Nutrients
-            const Text(
-              '2. NPK SOIL NUTRIENTS (kg/ha)',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textSecondary,
-                letterSpacing: 1.1,
-              ),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '1. NPK SOIL NUTRIENTS (kg/ha)',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                Text(
+                  '⚡ Sensor Synced',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.primaryGreen,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             if (isMobile) ...[
@@ -305,8 +287,11 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                     child: TextFormField(
                       controller: _nitrogenController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Nitrogen (N)'),
-                      validator: (val) => val == null || val.isEmpty ? 'Req' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Nitrogen (N)',
+                      ),
+                      validator: (val) =>
+                          val == null || val.isEmpty ? 'Req' : null,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -314,8 +299,11 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                     child: TextFormField(
                       controller: _phosphorusController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Phosphorus (P)'),
-                      validator: (val) => val == null || val.isEmpty ? 'Req' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Phosphorus (P)',
+                      ),
+                      validator: (val) =>
+                          val == null || val.isEmpty ? 'Req' : null,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -323,8 +311,11 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                     child: TextFormField(
                       controller: _potassiumController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Potassium (K)'),
-                      validator: (val) => val == null || val.isEmpty ? 'Req' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Potassium (K)',
+                      ),
+                      validator: (val) =>
+                          val == null || val.isEmpty ? 'Req' : null,
                     ),
                   ),
                 ],
@@ -335,7 +326,7 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
 
             // Season & Month
             const Text(
-              '3. SEASON & HARVEST TIMING',
+              '2. SEASON & HARVEST TIMING',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
@@ -358,7 +349,9 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
               TextFormField(
                 controller: _monthController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Harvest Month (1-12)'),
+                decoration: const InputDecoration(
+                  labelText: 'Harvest Month (1-12)',
+                ),
                 validator: (val) => val == null || val.isEmpty ? 'Req' : null,
               ),
             ] else ...[
@@ -380,8 +373,11 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                     child: TextFormField(
                       controller: _monthController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Harvest Month (1-12)'),
-                      validator: (val) => val == null || val.isEmpty ? 'Req' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Harvest Month (1-12)',
+                      ),
+                      validator: (val) =>
+                          val == null || val.isEmpty ? 'Req' : null,
                     ),
                   ),
                 ],
@@ -392,7 +388,7 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
 
             // Market Lags
             const Text(
-              '4. CURRENT MARKET PRICE (Rs./kg)',
+              '3. CURRENT MARKET PRICE (Rs./kg)',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
@@ -409,7 +405,9 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                 prefixIcon: Icon(Icons.attach_money_rounded, size: 20),
                 hintText: '120',
               ),
-              validator: (val) => val == null || val.isEmpty ? 'Please enter current market price' : null,
+              validator: (val) => val == null || val.isEmpty
+                  ? 'Please enter current market price'
+                  : null,
             ),
 
             if (_error != null) ...[
@@ -421,9 +419,13 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFFFCA5A5)),
                 ),
-                child: Text(_error!,
-                    style: const TextStyle(
-                        color: Color(0xFFDC2626), fontSize: 12)),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: Color(0xFFDC2626),
+                    fontSize: 12,
+                  ),
+                ),
               ),
             ],
 
@@ -438,12 +440,16 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Icon(Icons.psychology_rounded),
-                label: Text(_loading
-                    ? 'Analyzing Best Crop Varieties...'
-                    : 'Find Best Crops & Market Forecast'),
+                label: Text(
+                  _loading
+                      ? 'Analyzing Best Crop Varieties...'
+                      : 'Find Best Crops & Market Forecast',
+                ),
               ),
             ),
           ],
@@ -495,15 +501,19 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
               child: Center(
                 child: Column(
                   children: [
-                    Icon(Icons.grass_outlined,
-                        size: 48, color: AppTheme.borderSubtle),
+                    Icon(
+                      Icons.grass_outlined,
+                      size: 48,
+                      color: AppTheme.borderSubtle,
+                    ),
                     SizedBox(height: 12),
                     Text(
                       'No recommendation generated',
                       style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textSecondary),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
                     SizedBox(height: 4),
                     Text(
@@ -530,8 +540,11 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.emoji_events_rounded,
-                            color: AppTheme.primaryGreen, size: 18),
+                        Icon(
+                          Icons.emoji_events_rounded,
+                          color: AppTheme.primaryGreen,
+                          size: 18,
+                        ),
                         SizedBox(width: 6),
                         Text(
                           'HIGH PROFIT RECOMMENDATION',
@@ -567,9 +580,13 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                                 color: AppTheme.primaryGreen,
                               ),
                             ),
-                            const Text('/ kg forecasted',
-                                style: TextStyle(
-                                    fontSize: 10, color: AppTheme.textSecondary)),
+                            const Text(
+                              '/ kg forecasted',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -587,8 +604,11 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                   Expanded(
                     child: _buildRankTile(
                       'Balanced Rank #2',
-                      _result!['recommendations']['balanced']['crop'].toString(),
-                      _formatNum(_result!['recommendations']['balanced']['predicted_price']),
+                      _result!['recommendations']['balanced']['crop']
+                          .toString(),
+                      _formatNum(
+                        _result!['recommendations']['balanced']['predicted_price'],
+                      ),
                     ),
                   ),
                 if (_result!['recommendations']?['balanced'] != null &&
@@ -599,7 +619,9 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
                     child: _buildRankTile(
                       'Safe Rank #3',
                       _result!['recommendations']['safe']['crop'].toString(),
-                      _formatNum(_result!['recommendations']['safe']['predicted_price']),
+                      _formatNum(
+                        _result!['recommendations']['safe']['predicted_price'],
+                      ),
                     ),
                   ),
               ],
@@ -621,17 +643,23 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textSecondary)),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textSecondary,
+            ),
+          ),
           const SizedBox(height: 6),
-          Text(crop,
-              style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary)),
+          Text(
+            crop,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
           const SizedBox(height: 2),
           Text(
             'Rs. $price / kg',

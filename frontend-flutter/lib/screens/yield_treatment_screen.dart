@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/firebase_service.dart';
 
 class YieldTreatmentScreen extends StatefulWidget {
   const YieldTreatmentScreen({super.key});
@@ -13,13 +14,18 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
   final _formKey = GlobalKey<FormState>();
 
   // Input Controllers initialized with exact reference values
-  final TextEditingController _moistureController = TextEditingController(text: '72');
-  final TextEditingController _tempController = TextEditingController(text: '27');
-  final TextEditingController _humidityController = TextEditingController(text: '84');
-  final TextEditingController _nitrogenController = TextEditingController(text: '100');
-  final TextEditingController _phosphorusController = TextEditingController(text: '48');
-  final TextEditingController _potassiumController = TextEditingController(text: '44');
-  final TextEditingController _severityController = TextEditingController(text: '35');
+  final TextEditingController _nitrogenController = TextEditingController(
+    text: '45',
+  );
+  final TextEditingController _phosphorusController = TextEditingController(
+    text: '28',
+  );
+  final TextEditingController _potassiumController = TextEditingController(
+    text: '110',
+  );
+  final TextEditingController _severityController = TextEditingController(
+    text: '35',
+  );
 
   String _growthStage = 'maturity';
   String _season = 'Maha';
@@ -33,18 +39,28 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
   @override
   void initState() {
     super.initState();
-    // Default initial calculations matching reference image
-    _calculateDefaultResults();
+    _fetchFirebaseTelemetry();
   }
 
-  void _calculateDefaultResults() {
-    _result = {
-      'base_yield': 4585.22,
-      'disease_loss': 9.97,
-      'untreated_yield': 4128.19,
-      'treated_yield': 4402.41,
-      'decision': 'TREAT',
-    };
+  Future<void> _fetchFirebaseTelemetry() async {
+    try {
+      final data = await FirebaseService.fetchLatestTelemetry();
+      if (data != null && mounted) {
+        setState(() {
+          if (data.containsKey('nitrogen')) {
+            _nitrogenController.text = data['nitrogen'].toString();
+          }
+          if (data.containsKey('phosphorus')) {
+            _phosphorusController.text = data['phosphorus'].toString();
+          }
+          if (data.containsKey('potassium')) {
+            _potassiumController.text = data['potassium'].toString();
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('[YieldTreatmentScreen] Telemetry fetch error: $e');
+    }
   }
 
   Future<void> _submitForm() async {
@@ -56,18 +72,12 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
     });
 
     try {
-      final double moisture = double.tryParse(_moistureController.text) ?? 72;
-      final double temp = double.tryParse(_tempController.text) ?? 27;
-      final double humidity = double.tryParse(_humidityController.text) ?? 84;
       final double n = double.tryParse(_nitrogenController.text) ?? 100;
       final double p = double.tryParse(_phosphorusController.text) ?? 48;
       final double k = double.tryParse(_potassiumController.text) ?? 44;
       final double severity = double.tryParse(_severityController.text) ?? 35;
 
       final payload = {
-        'soil_moisture': moisture,
-        'temperature': temp,
-        'humidity': humidity,
         'nitrogen': n,
         'phosphorus': p,
         'potassium': k,
@@ -84,11 +94,14 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
           _result = response;
         });
       } catch (apiErr) {
-        // Fallback local mathematical yield calculation if backend offline
-        _computeLocalYield(moisture, n, p, k, severity);
+        setState(() {
+          _result = null;
+          _error = apiErr.toString().replaceAll('Exception: ', '');
+        });
       }
     } catch (e) {
       setState(() {
+        _result = null;
         _error = e.toString().replaceAll('Exception: ', '');
       });
     } finally {
@@ -98,24 +111,6 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
         });
       }
     }
-  }
-
-  void _computeLocalYield(double moisture, double n, double p, double k, double severity) {
-    double baseYield = 4200.0 + (n * 1.5) + (p * 2.0) + (k * 1.2) + (moisture * 3.0);
-    double lossPercent = (severity * 0.285).clamp(0.0, 45.0);
-    double untreatedYield = baseYield * (1 - (lossPercent / 100));
-    double treatedYield = baseYield * (1 - (lossPercent * 0.4 / 100));
-    String decision = (lossPercent > 5.0) ? 'TREAT' : 'NO TREAT';
-
-    setState(() {
-      _result = {
-        'base_yield': baseYield,
-        'disease_loss': lossPercent,
-        'untreated_yield': untreatedYield,
-        'treated_yield': treatedYield,
-        'decision': decision,
-      };
-    });
   }
 
   @override
@@ -141,7 +136,10 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Left Column: Input Information Card (Flex 6)
-                      Expanded(flex: 6, child: _buildInputInformationCard(isMobile: false)),
+                      Expanded(
+                        flex: 6,
+                        child: _buildInputInformationCard(isMobile: false),
+                      ),
                       const SizedBox(width: 24),
                       // Right Column: Prediction Results Card (Flex 5)
                       Expanded(flex: 5, child: _buildPredictionResultsCard()),
@@ -178,7 +176,11 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
               color: AppTheme.primaryGreen,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+            child: const Icon(
+              Icons.arrow_back_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
           ),
         ),
         const SizedBox(width: 16),
@@ -212,7 +214,11 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
         if (isDesktop) ...[
           IconButton(
             onPressed: () {},
-            icon: const Icon(Icons.wb_sunny_outlined, color: AppTheme.textSecondary, size: 20),
+            icon: const Icon(
+              Icons.wb_sunny_outlined,
+              color: AppTheme.textSecondary,
+              size: 20,
+            ),
             tooltip: 'Theme Toggle',
           ),
           const SizedBox(width: 8),
@@ -221,12 +227,20 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
               const CircleAvatar(
                 radius: 14,
                 backgroundColor: AppTheme.greenLightBg,
-                child: Icon(Icons.person, color: AppTheme.primaryGreen, size: 18),
+                child: Icon(
+                  Icons.person,
+                  color: AppTheme.primaryGreen,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 6),
               const Text(
                 'Farmer',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
               ),
             ],
           ),
@@ -265,7 +279,11 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
                     color: AppTheme.greenLightBg,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.assignment_outlined, color: AppTheme.primaryGreen, size: 20),
+                  child: const Icon(
+                    Icons.assignment_outlined,
+                    color: AppTheme.primaryGreen,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 const Text(
@@ -280,47 +298,74 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Group 1: Soil & Environmental Data
-            const Text(
-              'Soil & Environmental Data',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary,
-              ),
+            // Group 1: Soil Nutrient Data (NPK)
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Soil Nutrient Data (NPK)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                Text(
+                  '⚡ Sensor Synced',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.primaryGreen,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
 
             if (isMobile) ...[
-              _buildInputField(_moistureController, 'Soil Moisture (%)', '72'),
+              _buildInputField(
+                _nitrogenController,
+                'Nitrogen (N) (kg/ha)',
+                '100',
+              ),
               const SizedBox(height: 10),
-              _buildInputField(_tempController, 'Temperature (°C)', '27'),
+              _buildInputField(
+                _phosphorusController,
+                'Phosphorus (P) (kg/ha)',
+                '48',
+              ),
               const SizedBox(height: 10),
-              _buildInputField(_humidityController, 'Humidity (%)', '84'),
-              const SizedBox(height: 10),
-              _buildInputField(_nitrogenController, 'Nitrogen (N) (kg/ha)', '100'),
-              const SizedBox(height: 10),
-              _buildInputField(_phosphorusController, 'Phosphorus (P) (kg/ha)', '48'),
-              const SizedBox(height: 10),
-              _buildInputField(_potassiumController, 'Potassium (K) (kg/ha)', '44'),
+              _buildInputField(
+                _potassiumController,
+                'Potassium (K) (kg/ha)',
+                '44',
+              ),
             ] else ...[
               Row(
                 children: [
-                  Expanded(child: _buildInputField(_moistureController, 'Soil Moisture (%)', '72')),
+                  Expanded(
+                    child: _buildInputField(
+                      _nitrogenController,
+                      'Nitrogen (N) (kg/ha)',
+                      '100',
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildInputField(_tempController, 'Temperature (°C)', '27')),
+                  Expanded(
+                    child: _buildInputField(
+                      _phosphorusController,
+                      'Phosphorus (P) (kg/ha)',
+                      '48',
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildInputField(_humidityController, 'Humidity (%)', '84')),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: _buildInputField(_nitrogenController, 'Nitrogen (N) (kg/ha)', '100')),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildInputField(_phosphorusController, 'Phosphorus (P) (kg/ha)', '48')),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildInputField(_potassiumController, 'Potassium (K) (kg/ha)', '44')),
+                  Expanded(
+                    child: _buildInputField(
+                      _potassiumController,
+                      'Potassium (K) (kg/ha)',
+                      '44',
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -343,8 +388,14 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
                 label: 'Growth Stage',
                 value: _growthStage,
                 items: const [
-                  DropdownMenuItem(value: 'germination', child: Text('germination')),
-                  DropdownMenuItem(value: 'tillering', child: Text('tillering')),
+                  DropdownMenuItem(
+                    value: 'germination',
+                    child: Text('germination'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'tillering',
+                    child: Text('tillering'),
+                  ),
                   DropdownMenuItem(value: 'panicle', child: Text('panicle')),
                   DropdownMenuItem(value: 'heading', child: Text('heading')),
                   DropdownMenuItem(value: 'maturity', child: Text('maturity')),
@@ -380,11 +431,26 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
                       label: 'Growth Stage',
                       value: _growthStage,
                       items: const [
-                        DropdownMenuItem(value: 'germination', child: Text('germination')),
-                        DropdownMenuItem(value: 'tillering', child: Text('tillering')),
-                        DropdownMenuItem(value: 'panicle', child: Text('panicle')),
-                        DropdownMenuItem(value: 'heading', child: Text('heading')),
-                        DropdownMenuItem(value: 'maturity', child: Text('maturity')),
+                        DropdownMenuItem(
+                          value: 'germination',
+                          child: Text('germination'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'tillering',
+                          child: Text('tillering'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'panicle',
+                          child: Text('panicle'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'heading',
+                          child: Text('heading'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'maturity',
+                          child: Text('maturity'),
+                        ),
                       ],
                       onChanged: (val) => setState(() => _growthStage = val!),
                     ),
@@ -437,8 +503,14 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
                 value: _disease,
                 items: const [
                   DropdownMenuItem(value: 'Blast', child: Text('Blast')),
-                  DropdownMenuItem(value: 'BrownSpot', child: Text('Brown Spot')),
-                  DropdownMenuItem(value: 'BacterialBlight', child: Text('Bacterial Blight')),
+                  DropdownMenuItem(
+                    value: 'BrownSpot',
+                    child: Text('Brown Spot'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'BacterialBlight',
+                    child: Text('Bacterial Blight'),
+                  ),
                   DropdownMenuItem(value: 'None', child: Text('None')),
                 ],
                 onChanged: (val) => setState(() => _disease = val!),
@@ -455,8 +527,14 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
                       value: _disease,
                       items: const [
                         DropdownMenuItem(value: 'Blast', child: Text('Blast')),
-                        DropdownMenuItem(value: 'BrownSpot', child: Text('Brown Spot')),
-                        DropdownMenuItem(value: 'BacterialBlight', child: Text('Bacterial Blight')),
+                        DropdownMenuItem(
+                          value: 'BrownSpot',
+                          child: Text('Brown Spot'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'BacterialBlight',
+                          child: Text('Bacterial Blight'),
+                        ),
                         DropdownMenuItem(value: 'None', child: Text('None')),
                       ],
                       onChanged: (val) => setState(() => _disease = val!),
@@ -465,7 +543,11 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     flex: 1,
-                    child: _buildInputField(_severityController, 'Severity (%)', '35'),
+                    child: _buildInputField(
+                      _severityController,
+                      'Severity (%)',
+                      '35',
+                    ),
                   ),
                 ],
               ),
@@ -478,9 +560,17 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
                 decoration: BoxDecoration(
                   color: AppTheme.redLightBg,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.accentRed.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: AppTheme.accentRed.withValues(alpha: 0.3),
+                  ),
                 ),
-                child: Text(_error!, style: const TextStyle(color: AppTheme.accentRed, fontSize: 12)),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: AppTheme.accentRed,
+                    fontSize: 12,
+                  ),
+                ),
               ),
             ],
 
@@ -495,20 +585,28 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryGreenDark,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 child: _loading
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
                       )
                     : const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
                             'Predict Yield & Decision',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           SizedBox(width: 8),
                           Icon(Icons.play_arrow_rounded, size: 20),
@@ -522,24 +620,54 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
     );
   }
 
-  Widget _buildInputField(TextEditingController controller, String label, String hint) {
+  Widget _buildInputField(
+    TextEditingController controller,
+    String label,
+    String hint,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
         const SizedBox(height: 4),
         TextFormField(
           controller: controller,
           keyboardType: TextInputType.number,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
           decoration: InputDecoration(
             hintText: hint,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
             filled: true,
             fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.borderLight)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.borderLight)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.primaryGreen, width: 1.5)),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppTheme.borderLight),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppTheme.borderLight),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: AppTheme.primaryGreen,
+                width: 1.5,
+              ),
+            ),
           ),
           validator: (val) => val == null || val.isEmpty ? 'Required' : null,
         ),
@@ -556,18 +684,44 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
         const SizedBox(height: 4),
         DropdownButtonFormField<String>(
           initialValue: value,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
           decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
             filled: true,
             fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.borderLight)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.borderLight)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.primaryGreen, width: 1.5)),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppTheme.borderLight),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppTheme.borderLight),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: AppTheme.primaryGreen,
+                width: 1.5,
+              ),
+            ),
           ),
           items: items,
           onChanged: onChanged,
@@ -578,18 +732,14 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
 
   // ── 3. Right Card: Prediction Results ──
   Widget _buildPredictionResultsCard() {
-    final double baseYield = (_result?['base_yield'] as num?)?.toDouble() ?? 4585.22;
-    final double diseaseLoss = (_result?['disease_loss'] as num?)?.toDouble() ?? 9.97;
-    final double untreatedYield = (_result?['untreated_yield'] as num?)?.toDouble() ?? 4128.19;
-    final double treatedYield = (_result?['treated_yield'] as num?)?.toDouble() ?? 4402.41;
-    final String decision = _result?['decision']?.toString() ?? 'TREAT';
-
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6FAF7), // Light green surface tint matching reference image
+        color: _result == null ? Colors.white : const Color(0xFFF6FAF7),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.greenBorder),
+        border: Border.all(
+          color: _result == null ? AppTheme.borderLight : AppTheme.greenBorder,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),
@@ -610,7 +760,11 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
                   color: AppTheme.greenLightBg,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen, size: 20),
+                child: const Icon(
+                  Icons.eco_rounded,
+                  color: AppTheme.primaryGreen,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 10),
               const Text(
@@ -623,111 +777,173 @@ class _YieldTreatmentScreenState extends State<YieldTreatmentScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const Divider(height: 24, color: AppTheme.borderLight),
 
-          // Row 1: Base Yield (Healthy)
-          _buildResultRow(
-            icon: Icons.grass_rounded,
-            iconBgColor: AppTheme.greenLightBg,
-            iconColor: AppTheme.primaryGreen,
-            label: 'Base Yield (Healthy)',
-            valueText: baseYield.toStringAsFixed(2),
-            unitText: 'kg/ha',
-            valueColor: AppTheme.primaryGreenDark,
-          ),
-          const SizedBox(height: 12),
-
-          // Row 2: Disease Loss
-          _buildResultRow(
-            icon: Icons.coronavirus_outlined,
-            iconBgColor: AppTheme.redLightBg,
-            iconColor: AppTheme.accentRed,
-            label: 'Disease Loss',
-            valueText: diseaseLoss.toStringAsFixed(2),
-            unitText: '%',
-            valueColor: AppTheme.accentRed,
-          ),
-          const SizedBox(height: 12),
-
-          // Row 3: Untreated Yield
-          _buildResultRow(
-            icon: Icons.filter_vintage_outlined,
-            iconBgColor: AppTheme.orangeLightBg,
-            iconColor: AppTheme.accentOrange,
-            label: 'Untreated Yield',
-            valueText: untreatedYield.toStringAsFixed(2),
-            unitText: 'kg/ha',
-            valueColor: const Color(0xFFD97706),
-          ),
-          const SizedBox(height: 12),
-
-          // Row 4: Treated Yield
-          _buildResultRow(
-            icon: Icons.medical_services_outlined,
-            iconBgColor: AppTheme.blueLightBg,
-            iconColor: AppTheme.accentBlue,
-            label: 'Treated Yield',
-            valueText: treatedYield.toStringAsFixed(2),
-            unitText: 'kg/ha',
-            valueColor: const Color(0xFF2563EB),
-          ),
-          const SizedBox(height: 16),
-
-          // Row 5: Decision Callout Box
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            decoration: BoxDecoration(
-              color: AppTheme.greenLightBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.greenBorder),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(
+          if (_result == null)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(
+                child: Column(
                   children: [
-                    Icon(Icons.check_circle_rounded, color: AppTheme.primaryGreen, size: 22),
-                    SizedBox(width: 10),
+                    Icon(
+                      Icons.eco_outlined,
+                      size: 48,
+                      color: AppTheme.borderSubtle,
+                    ),
+                    SizedBox(height: 12),
                     Text(
-                      'Decision',
+                      'No yield prediction calculated yet',
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textSecondary,
                       ),
                     ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    const Icon(Icons.eco_outlined, color: AppTheme.primaryGreenDark, size: 18),
-                    const SizedBox(width: 6),
+                    SizedBox(height: 4),
                     Text(
-                      decision,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.primaryGreenDark,
-                        letterSpacing: 0.5,
-                      ),
+                      'Fill parameters and click Predict Yield & Decision',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            )
+          else ...[
+            Builder(
+              builder: (context) {
+                final double baseYield =
+                    (_result!['base_yield'] as num?)?.toDouble() ?? 0.0;
+                final double diseaseLoss =
+                    (_result!['disease_loss'] as num?)?.toDouble() ?? 0.0;
+                final double untreatedYield =
+                    (_result!['untreated_yield'] as num?)?.toDouble() ?? 0.0;
+                final double treatedYield =
+                    (_result!['treated_yield'] as num?)?.toDouble() ?? 0.0;
+                final String decision =
+                    _result!['decision']?.toString() ?? 'N/A';
 
-          const SizedBox(height: 18),
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Row 1: Base Yield (Healthy)
+                    _buildResultRow(
+                      icon: Icons.grass_rounded,
+                      iconBgColor: AppTheme.greenLightBg,
+                      iconColor: AppTheme.primaryGreen,
+                      label: 'Base Yield (Healthy)',
+                      valueText: baseYield.toStringAsFixed(2),
+                      unitText: 'kg/ha',
+                      valueColor: AppTheme.primaryGreenDark,
+                    ),
+                    const SizedBox(height: 12),
 
-          // Footnote
-          const Text(
-            '* Treated yield is calculated assuming treatment reduces disease loss by 60%.',
-            style: TextStyle(
-              fontSize: 11,
-              color: AppTheme.textMuted,
-              fontStyle: FontStyle.italic,
+                    // Row 2: Disease Loss
+                    _buildResultRow(
+                      icon: Icons.coronavirus_outlined,
+                      iconBgColor: AppTheme.redLightBg,
+                      iconColor: AppTheme.accentRed,
+                      label: 'Disease Loss',
+                      valueText: diseaseLoss.toStringAsFixed(2),
+                      unitText: '%',
+                      valueColor: AppTheme.accentRed,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Row 3: Untreated Yield
+                    _buildResultRow(
+                      icon: Icons.filter_vintage_outlined,
+                      iconBgColor: AppTheme.orangeLightBg,
+                      iconColor: AppTheme.accentOrange,
+                      label: 'Untreated Yield',
+                      valueText: untreatedYield.toStringAsFixed(2),
+                      unitText: 'kg/ha',
+                      valueColor: const Color(0xFFD97706),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Row 4: Treated Yield
+                    _buildResultRow(
+                      icon: Icons.medical_services_outlined,
+                      iconBgColor: AppTheme.blueLightBg,
+                      iconColor: AppTheme.accentBlue,
+                      label: 'Treated Yield',
+                      valueText: treatedYield.toStringAsFixed(2),
+                      unitText: 'kg/ha',
+                      valueColor: const Color(0xFF2563EB),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Row 5: Decision Callout Box
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.greenLightBg,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppTheme.greenBorder),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.check_circle_rounded,
+                                color: AppTheme.primaryGreen,
+                                size: 22,
+                              ),
+                              SizedBox(width: 10),
+                              Text(
+                                'Decision',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.eco_outlined,
+                                color: AppTheme.primaryGreenDark,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                decision,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppTheme.primaryGreenDark,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // Footnote
+                    const Text(
+                      '* Treated yield is calculated assuming treatment reduces disease loss by 60%.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textMuted,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
-          ),
+          ],
         ],
       ),
     );

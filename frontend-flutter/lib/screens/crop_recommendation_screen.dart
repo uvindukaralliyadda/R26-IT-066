@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 
+// retrieve the latest IoT sensor data from Firebase
+import '../services/firebase_service.dart';
+
 class CropRecommendationScreen extends StatefulWidget {
   const CropRecommendationScreen({super.key});
 
@@ -13,12 +16,9 @@ class CropRecommendationScreen extends StatefulWidget {
 class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final TextEditingController _moistureController = TextEditingController(text: '65');
-  final TextEditingController _tempController = TextEditingController(text: '28');
-  final TextEditingController _humidityController = TextEditingController(text: '80');
-  final TextEditingController _nitrogenController = TextEditingController(text: '90');
-  final TextEditingController _phosphorusController = TextEditingController(text: '40');
-  final TextEditingController _potassiumController = TextEditingController(text: '40');
+  final TextEditingController _nitrogenController = TextEditingController(text: '45');
+  final TextEditingController _phosphorusController = TextEditingController(text: '28');
+  final TextEditingController _potassiumController = TextEditingController(text: '110');
   final TextEditingController _monthController = TextEditingController(text: '4');
   final TextEditingController _lagPriceController = TextEditingController(text: '120');
 
@@ -27,6 +27,33 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
   bool _loading = false;
   Map<String, dynamic>? _result;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchFirebaseTelemetry();
+  }
+
+  Future<void> _fetchFirebaseTelemetry() async {
+    try {
+      final data = await FirebaseService.fetchLatestTelemetry();
+      if (data != null && mounted) {
+        setState(() {
+          if (data.containsKey('nitrogen')) {
+            _nitrogenController.text = data['nitrogen'].toString();
+          }
+          if (data.containsKey('phosphorus')) {
+            _phosphorusController.text = data['phosphorus'].toString();
+          }
+          if (data.containsKey('potassium')) {
+            _potassiumController.text = data['potassium'].toString();
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('[CropRecommendationScreen] Telemetry fetch error: $e');
+    }
+  }
 
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
@@ -43,9 +70,6 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
       final double lag3 = currentPrice - 20;
 
       final payload = {
-        'soil_moisture': double.parse(_moistureController.text),
-        'temperature': double.parse(_tempController.text),
-        'humidity': double.parse(_humidityController.text),
         'nitrogen': double.parse(_nitrogenController.text),
         'phosphorus': double.parse(_phosphorusController.text),
         'potassium': double.parse(_potassiumController.text),
@@ -199,82 +223,28 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
             ),
             const Divider(height: 24, color: AppTheme.borderLight),
 
-            // Soil & Climate
-            const Text(
-              '1. SOIL & CLIMATE CONDITIONS',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textSecondary,
-                letterSpacing: 1.1,
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (isMobile) ...[
-              TextFormField(
-                controller: _moistureController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Moisture (%)'),
-                validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _tempController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Temp (°C)'),
-                validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _humidityController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Humidity (%)'),
-                validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-              ),
-            ] else ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _moistureController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Moisture (%)'),
-                      validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _tempController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Temp (°C)'),
-                      validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _humidityController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Humidity (%)'),
-                      validator: (val) => val == null || val.isEmpty ? 'Req' : null,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-
-            const SizedBox(height: 20),
-
             // NPK Nutrients
-            const Text(
-              '2. NPK SOIL NUTRIENTS (kg/ha)',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textSecondary,
-                letterSpacing: 1.1,
-              ),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '1. NPK SOIL NUTRIENTS (kg/ha)',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                Text(
+                  '⚡ Sensor Synced',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.primaryGreen,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             if (isMobile) ...[
@@ -335,7 +305,7 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
 
             // Season & Month
             const Text(
-              '3. SEASON & HARVEST TIMING',
+              '2. SEASON & HARVEST TIMING',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
@@ -392,7 +362,7 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
 
             // Market Lags
             const Text(
-              '4. CURRENT MARKET PRICE (Rs./kg)',
+              '3. CURRENT MARKET PRICE (Rs./kg)',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
